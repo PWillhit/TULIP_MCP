@@ -1,0 +1,30 @@
+{
+  "name": "createInterface",
+  "description": "Creates a new interface. Corresponds to POST /api/stations/v1/interfaces. Requires `stations:write` scope. [WRITE]",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Name of the interface"
+      },
+      "stationId": {
+        "type": "string",
+        "description": "The ID of the station to assign the interface to"
+      },
+      "replaceInterfaceAtStation": {
+        "type": "boolean",
+        "description": "If set to true, indicates that if there is already an interface at the station it will be replaced"
+      }
+    },
+    "required": [
+      "name",
+      "stationId"
+    ]
+  },
+  "category": "write",
+  "type": "interface",
+  "dangerous": false,
+  "httpType": "POST",
+  "url": "/api/stations/v1/interfaces"
+}
