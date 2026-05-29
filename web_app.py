@@ -54,9 +54,9 @@ except Exception as e:
     bedrock_client = None
 
 # Import Tulip tool classes
-from tulip_api_client import TulipApiClient
-from tool_definition_loader import ToolDefinitionLoader
-from tulip_tool_executor import TulipToolExecutor
+from tulip_client import TulipApiClient
+from tool_def_loader import ToolDefinitionLoader
+from execute_tool import TulipToolExecutor
 
 # Initialize Tulip tool infrastructure
 try:

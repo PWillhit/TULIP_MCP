@@ -1,8 +1,8 @@
 import logging
 import json
 from typing import Dict, Any, Optional
-from tulip_api_client import TulipApiClient
-from tool_definition_loader import ToolDefinitionLoader
+from tulip_client import TulipApiClient
+from tool_def_loader import ToolDefinitionLoader
 
 logger = logging.getLogger(__name__)
 
