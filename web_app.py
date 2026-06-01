@@ -99,7 +99,11 @@ try:
     seen = set()
     TOOLS = [t for t in TOOLS if not (t["name"] in seen or seen.add(t["name"]))]
 
-    logger.info(f"Loaded {len(TOOLS)} {', '.join(ENABLED_TOOLS)} tools)")
+    if not TOOLS:
+        logger.info(f"No tools specified, loading default read-only tools")
+        TOOLS = tool_loader.get_tools_by_category("read-only")
+    
+    logger.info(f"Loaded {len(TOOLS)} {', '.join(ENABLED_TOOLS)} tools")
 except Exception as e:
     logger.error(f"Failed to initialize Tulip tools: {e}", exc_info=True)
     TOOLS = []
