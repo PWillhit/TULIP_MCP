@@ -163,7 +163,7 @@ class TulipApiClient:
                 cert_path = os.getenv("ZSCALER_CERT_PATH")
                 verify = cert_path if cert_path else True
 
-                response = requests.request(method, url, verify=verify **kwargs)
+                response = requests.request(method, url, verify=verify, **kwargs)
 
                 # Handle successful responses
                 if response.ok:
