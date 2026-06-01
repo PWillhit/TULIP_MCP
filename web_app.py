@@ -179,7 +179,7 @@ async def ask_question(request: QueryRequest):
                     "name": tool["name"],
                     "description": tool["description"],
                     "inputSchema": {
-                        "json": tool["input_schema"]
+                        "json": tool["inputSchema"]
                     }
                 }
             })
