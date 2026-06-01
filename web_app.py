@@ -75,7 +75,7 @@ try:
 
     # Load enabled tools by default
     TOOLS = tool_loader.get_tools_by_category(ENABLED_TOOLS)
-    logger.info(f"Loaded {len(TOOLS)} enabled Tulip tools")
+    logger.info(f"Loaded {len(TOOLS)} {', '.join(ENABLED_TOOLS)} Tulip tools")
 except Exception as e:
     logger.error(f"Failed to initialize Tulip tools: {e}", exc_info=True)
     TOOLS = []
