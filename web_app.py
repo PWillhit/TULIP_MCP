@@ -73,7 +73,7 @@ try:
     tool_executor = TulipToolExecutor(tulip_api_client, tool_loader)
 
     # Load tools based on ENABLED_TOOLS env var, default to read-only
-    enabled_tools_str = os.getenv("ENABLED_TOOLS", "read-only")
+    enabled_tools_str = os.getenv("ENABLED_TOOLS", "read-only") or "read-only"
     enabled_items = [item.strip() for item in enabled_tools_str.split(",")]
 
     TOOLS = []
