@@ -74,7 +74,12 @@ try:
     tool_executor = TulipToolExecutor(tulip_api_client, tool_loader)
 
     # Load enabled tools by default
-    TOOLS = tool_loader.get_tools_by_category(ENABLED_TOOLS)
+    for category in ENABLED_TOOLS:
+        if category not in tool_loader.categories:
+            logger.warning(f"Tool category '{category}' not found in definitions. Available categories: {tool_loader.categories}")
+        else:
+            TOOLS = tool_loader.get_tools_by_category(category)
+    
     logger.info(f"Loaded {len(TOOLS)} {', '.join(ENABLED_TOOLS)} Tulip tools")
 except Exception as e:
     logger.error(f"Failed to initialize Tulip tools: {e}", exc_info=True)
