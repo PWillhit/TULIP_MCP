@@ -73,14 +73,33 @@ try:
     tool_loader = ToolDefinitionLoader("definitions/")
     tool_executor = TulipToolExecutor(tulip_api_client, tool_loader)
 
-    # Load enabled tools by default
-    for category in ENABLED_TOOLS:
-        if category not in tool_loader.categories:
-            logger.warning(f"Tool category '{category}' not found in definitions. Available categories: {tool_loader.categories}")
+    # Load tools based on ENABLED_TOOLS env var, default to read-only
+    enabled_tools_str = os.getenv("ENABLED_TOOLS", "read-only")
+    enabled_items = [item.strip() for item in enabled_tools_str.split(",")]
+
+    TOOLS = []
+    for item in enabled_items:
+        # Try to get by category first, then by type, then by individual tool name
+        category_tools = tool_loader.get_tools_by_category(item)
+        if category_tools:
+            TOOLS.extend(category_tools)
         else:
-            TOOLS = tool_loader.get_tools_by_category(category)
-    
-    logger.info(f"Loaded {len(TOOLS)} {', '.join(ENABLED_TOOLS)} Tulip tools")
+            type_tools = tool_loader.get_tools_by_type(item)
+            if type_tools:
+                TOOLS.extend(type_tools)
+            else:
+                # Try to get individual tool by name
+                tool = tool_loader.get_tool_by_name(item)
+                if tool:
+                    TOOLS.append(tool)
+                else:
+                    logger.warning(f"Unknown tool/category/type: {item}")
+
+    # Remove duplicates while preserving order
+    seen = set()
+    TOOLS = [t for t in TOOLS if not (t["name"] in seen or seen.add(t["name"]))]
+
+    logger.info(f"Loaded {len(TOOLS)} Tulip tools: {', '.join([t['name'] for t in TOOLS])}")
 except Exception as e:
     logger.error(f"Failed to initialize Tulip tools: {e}", exc_info=True)
     TOOLS = []
