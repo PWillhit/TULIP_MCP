@@ -1,6 +1,6 @@
 {
   "name": "removeAllStationGroupAppAssignments",
-  "description": "⚠️ ADMIN OPERATION ⚠️ Removes all app assignments for the given station group. Corresponds to DELETE /api/stations/v1/station-groups/{stationGroupId}/app-assignments. Requires `stations:write` scope. [ADMIN]",
+  "description": "*ADMIN OPERATION* Removes all app assignments for the given station group. Corresponds to DELETE /api/stations/v1/station-groups/{stationGroupId}/app-assignments. Requires `stations:write` scope. [ADMIN]",
   "inputSchema": {
     "type": "object",
     "properties": {

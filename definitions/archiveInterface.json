@@ -1,6 +1,6 @@
 {
   "name": "archiveInterface",
-  "description": "⚠️ ADMIN OPERATION ⚠️ Archives an interface. This permanently removes the interface from active use. Corresponds to POST /api/stations/v1/interfaces/{interfaceId}/archive. Requires `stations:write` scope. [ADMIN]",
+  "description": "*ADMIN OPERATION* Archives an interface. This permanently removes the interface from active use. Corresponds to POST /api/stations/v1/interfaces/{interfaceId}/archive. Requires `stations:write` scope. [ADMIN]",
   "inputSchema": {
     "type": "object",
     "properties": {

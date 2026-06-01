@@ -1,6 +1,6 @@
 {
   "name": "deleteTableQuery",
-  "description": "⚠️ ADMIN OPERATION ⚠️ Removes a Tulip Table query by id. Corresponds to DELETE /tables/{tableId}/query/{queryId}. Requires `tables:write` scope. [ADMIN]",
+  "description": "*ADMIN OPERATION* Removes a Tulip Table query by id. Corresponds to DELETE /tables/{tableId}/query/{queryId}. Requires `tables:write` scope. [ADMIN]",
   "inputSchema": {
     "type": "object",
     "properties": {

@@ -1,6 +1,6 @@
 {
   "name": "deleteTableAggregation",
-  "description": "⚠️ ADMIN OPERATION ⚠️ Removes a Tulip Table aggregation by id. Corresponds to DELETE /tables/{tableId}/aggregation/{aggregationId}. Requires `tables:write` scope. [ADMIN]",
+  "description": "*ADMIN OPERATION* Removes a Tulip Table aggregation by id. Corresponds to DELETE /tables/{tableId}/aggregation/{aggregationId}. Requires `tables:write` scope. [ADMIN]",
   "inputSchema": {
     "type": "object",
     "properties": {

@@ -35,6 +35,7 @@ app.add_middleware(
 AWS_PROFILE = os.getenv("AWS_PROFILE", "manufacturing-bedrock")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 BEDROCK_MODEL = os.getenv("BEDROCK_MODEL", "us.anthropic.claude-sonnet-4-6")
+ENABLED_TOOLS = os.getenv("ENABLED_TOOLS", "read-only").split(",")
 
 bedrock_client = None
 try:
@@ -72,9 +73,9 @@ try:
     tool_loader = ToolDefinitionLoader("definitions/")
     tool_executor = TulipToolExecutor(tulip_api_client, tool_loader)
 
-    # Load read-only tools by default
-    TOOLS = tool_loader.get_tools_by_category("read-only")
-    logger.info(f"Loaded {len(TOOLS)} read-only Tulip tools")
+    # Load enabled tools by default
+    TOOLS = tool_loader.get_tools_by_category(ENABLED_TOOLS)
+    logger.info(f"Loaded {len(TOOLS)} enabled Tulip tools")
 except Exception as e:
     logger.error(f"Failed to initialize Tulip tools: {e}", exc_info=True)
     TOOLS = []
