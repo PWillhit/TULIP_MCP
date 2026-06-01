@@ -193,7 +193,7 @@ async def shutdown():
 
 @app.post("/api/ask")
 @limiter.limit("10/minute")
-async def ask_question(http_request: Request, request: QueryRequest):
+async def ask_question(request: Request, query: QueryRequest):
     """Accept a natural language question and return an answer from Claude via Bedrock."""
 
     if not bedrock_client:
@@ -202,13 +202,13 @@ async def ask_question(http_request: Request, request: QueryRequest):
             detail="Bedrock client not configured. Check AWS profile and aws_signing_helper setup."
         )
 
-    if not request.question.strip():
+    if not query.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
 
     try:
         # Add user message to history
-        conversation_history.append({"role": "user", "content": request.question})
+        conversation_history.append({"role": "user", "content": query.question})
 
         # Build full context including conversation history
         history_text = ""
@@ -224,7 +224,7 @@ async def ask_question(http_request: Request, request: QueryRequest):
                 "role": "user",
                 "content": [
                     {
-                        "text": f"{history_text}User: {request.question}"
+                        "text": f"{history_text}User: {query.question}"
                     }
                 ]
             }
