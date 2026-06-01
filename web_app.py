@@ -35,7 +35,7 @@ app.add_middleware(
 AWS_PROFILE = os.getenv("AWS_PROFILE", "manufacturing-bedrock")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 BEDROCK_MODEL = os.getenv("BEDROCK_MODEL", "us.anthropic.claude-sonnet-4-6")
-ENABLED_TOOLS = os.getenv("ENABLED_TOOLS", "read-only").split(",")
+ENABLED_TOOLS = os.getenv("ENABLED_TOOLS", "read-only,").split(",")
 
 bedrock_client = None
 try:
@@ -98,10 +98,6 @@ try:
     # Remove duplicates while preserving order
     seen = set()
     TOOLS = [t for t in TOOLS if not (t["name"] in seen or seen.add(t["name"]))]
-
-    if not TOOLS:
-        logger.info(f"No tools specified, loading default read-only tools")
-        TOOLS = tool_loader.get_tools_by_category("read-only")
     
     logger.info(f"Loaded {len(TOOLS)} {', '.join(ENABLED_TOOLS)} tools")
 except Exception as e:
