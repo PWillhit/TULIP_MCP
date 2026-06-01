@@ -1,3 +1,4 @@
+import os
 import requests
 import base64
 import time
@@ -158,7 +159,11 @@ class TulipApiClient:
                 logger.debug(
                     f"{method} {url} (attempt {attempt + 1}/{self.max_retries + 1})"
                 )
-                response = requests.request(method, url, **kwargs)
+                
+                cert_path = os.getenv("ZSCALER_CERT_PATH")
+                verify = cert_path if cert_path else True
+
+                response = requests.request(method, url, verify=verify **kwargs)
 
                 # Handle successful responses
                 if response.ok:
