@@ -97,8 +97,8 @@ try:
     # Remove duplicates while preserving order
     seen = set()
     TOOLS = [t for t in TOOLS if not (t["name"] in seen or seen.add(t["name"]))]
-    
-    logger.info(f"Loaded {len(TOOLS)} {', '.join(ENABLED_TOOLS)} tools")
+
+    logger.info(f"Loaded {len(TOOLS)} Tulip tools: {', '.join([t['name'] for t in TOOLS])}")
 except Exception as e:
     logger.error(f"Failed to initialize Tulip tools: {e}", exc_info=True)
     TOOLS = []
