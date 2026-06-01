@@ -35,7 +35,7 @@ app.add_middleware(
 AWS_PROFILE = os.getenv("AWS_PROFILE", "manufacturing-bedrock")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 BEDROCK_MODEL = os.getenv("BEDROCK_MODEL", "us.anthropic.claude-sonnet-4-6")
-ENABLED_TOOLS = os.getenv("ENABLED_TOOLS", "read-only,").split(",")
+ENABLED_TOOLS = os.getenv("ENABLED_TOOLS").split(",") or "read-only"
 
 bedrock_client = None
 try:
