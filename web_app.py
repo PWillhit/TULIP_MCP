@@ -1,6 +1,6 @@
 import os
 import signal
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -9,6 +9,10 @@ import json
 import logging
 import boto3
 from typing import Optional, List, Dict, Any
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from botocore.exceptions import ClientError, ConnectTimeoutError, ReadTimeoutError
 
 
 load_dotenv()
@@ -17,6 +21,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
+
+# Rate limiter: 10 requests per minute per IP
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, lambda request, exc: HTTPException(status_code=429, detail="Rate limit exceeded: 10 requests per minute"))
 
 # In-memory conversation history
 conversation_history = []
@@ -116,8 +125,21 @@ class QueryRequest(BaseModel):
     question: str
 
 
-# System prompt to prime Claude to use the tools
-SYSTEM_PROMPT = """You are an assistant that helps users query and analyze data from the Tulip platform.
+def generate_system_prompt(tools: List[Dict[str, Any]]) -> str:
+    """Generate system prompt with enabled tools information."""
+    # Extract enabled categories and types from loaded tools
+    categories = set()
+    types = set()
+    for tool in tools:
+        if "category" in tool:
+            categories.add(tool["category"])
+        if "type" in tool:
+            types.add(tool["type"])
+
+    categories_str = ", ".join(sorted(categories)) if categories else "none"
+    types_str = ", ".join(sorted(types)) if types else "none"
+
+    return f"""You are an assistant that helps users query and analyze data from the Tulip platform.
 
 IMPORTANT: You have access to real-time tools that query the Tulip API. When users ask questions about:
 - Tables, records, and data in Tulip
@@ -137,8 +159,16 @@ Guidelines:
 6. For table data, always specify reasonable limits (10-50 records) unless user requests otherwise
 7. Include relevant metadata in responses (IDs, timestamps, status) to make results actionable
 
-Available tool categories:
-- Read-only tools: Query tables, records, stations, users, and other data from Tulip
+Error Handling:
+- If a tool returns an error with "_do_not_retry": true, acknowledge the error to the user and do NOT attempt to call that tool again
+- Tool errors indicate the API request failed; do not retry with different parameters
+- Inform the user about the specific error and suggest alternatives if possible
+
+Available in this session:
+- Categories: {categories_str}
+- Types: {types_str}
+
+For all tools:
 - Each tool has an input schema describing required and optional parameters
 - Use the tool's description and input schema to understand what parameters are needed
 
@@ -147,6 +177,10 @@ When constructing queries:
 - Use filters and sorting parameters when available to narrow results
 - Handle pagination with limit and offset for large datasets
 """
+
+
+# Generate system prompt with enabled tools
+SYSTEM_PROMPT = generate_system_prompt(TOOLS)
 
 
 @app.get("/shutdown")
@@ -158,7 +192,8 @@ async def shutdown():
 
 
 @app.post("/api/ask")
-async def ask_question(request: QueryRequest):
+@limiter.limit("10/minute")
+async def ask_question(http_request: Request, request: QueryRequest):
     """Accept a natural language question and return an answer from Claude via Bedrock."""
 
     if not bedrock_client:
@@ -222,10 +257,42 @@ async def ask_question(request: QueryRequest):
 
             try:
                 response = bedrock_client.converse(**bedrock_request)
-            except Exception as e:
-                logger.error(f"Bedrock API error: {e}")
+            except (ConnectTimeoutError, ReadTimeoutError):
+                logger.error(f"Bedrock timeout error")
                 return {
-                    "answer": "Error communicating with Claude. Please try again.",
+                    "answer": "Claude is taking too long to respond. Please try again.",
+                    "success": False
+                }
+            except ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code", "Unknown")
+                if error_code == "ThrottlingException":
+                    logger.warning(f"Bedrock throttled (rate limit)")
+                    return {
+                        "answer": "API quota exceeded. Please wait a moment and try again.",
+                        "success": False
+                    }
+                elif error_code == "ValidationException":
+                    logger.error(f"Invalid Bedrock request: {e}")
+                    return {
+                        "answer": "Invalid request configuration. Check your settings.",
+                        "success": False
+                    }
+                elif error_code == "AccessDeniedException":
+                    logger.error(f"AWS credentials invalid or expired")
+                    return {
+                        "answer": "Authentication failed. Check your AWS credentials.",
+                        "success": False
+                    }
+                else:
+                    logger.error(f"Bedrock client error ({error_code}): {e}")
+                    return {
+                        "answer": "Error communicating with Claude. Please try again.",
+                        "success": False
+                    }
+            except Exception as e:
+                logger.error(f"Unexpected Bedrock error: {e}")
+                return {
+                    "answer": "Unexpected error. Please try again.",
                     "success": False
                 }
 
@@ -271,6 +338,22 @@ async def ask_question(request: QueryRequest):
                         tool_name = tool_use.get("name")
                         tool_use_id = tool_use.get("toolUseId")
                         tool_result = execute_mcp_tool(tool_name, tool_use.get("input", {}))
+
+                        # Check if tool result is an error
+                        try:
+                            result_obj = json.loads(tool_result)
+                            if isinstance(result_obj, dict) and "error" in result_obj:
+                                # Wrap error with explicit "do not retry" signal
+                                tool_result = json.dumps({
+                                    "error": result_obj.get("error"),
+                                    "details": result_obj.get("details"),
+                                    "_do_not_retry": True,
+                                    "_message": f"Tool '{tool_name}' failed. Do not attempt to call this tool again in this request."
+                                })
+                                logger.warning(f"Tool '{tool_name}' failed: {result_obj.get('error')}")
+                        except (json.JSONDecodeError, TypeError):
+                            pass  # Not JSON, treat as normal result
+
                         tool_results.append({
                             "toolUseId": tool_use_id,
                             "content": tool_result

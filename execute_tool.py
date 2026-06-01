@@ -1,10 +1,43 @@
 import logging
 import json
+import signal
 from typing import Dict, Any, Optional
+from functools import wraps
 from tulip_client import TulipApiClient
 from tool_def_loader import ToolDefinitionLoader
 
 logger = logging.getLogger(__name__)
+
+# Timeout in seconds for tool execution
+TOOL_EXECUTION_TIMEOUT = 30
+
+
+def timeout_handler(signum, frame):
+    """Handler for timeout signal."""
+    raise TimeoutError("Tool execution exceeded maximum timeout")
+
+
+def with_timeout(timeout_seconds):
+    """Decorator to add timeout to a function (Unix/Linux only)."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            # Only use signal-based timeout on Unix systems
+            import sys
+            if sys.platform == "win32":
+                # On Windows, just run without timeout (signal.alarm not available)
+                return func(*args, **kwargs)
+
+            old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(timeout_seconds)
+            try:
+                result = func(*args, **kwargs)
+            finally:
+                signal.alarm(0)  # Disable the alarm
+                signal.signal(signal.SIGALRM, old_handler)
+            return result
+        return wrapper
+    return decorator
 
 
 class TulipToolExecutor:
@@ -15,6 +48,7 @@ class TulipToolExecutor:
         self.tool_loader = tool_loader
         self.tools_by_name = {tool["name"]: tool for tool in tool_loader.get_all_tools()}
 
+    @with_timeout(TOOL_EXECUTION_TIMEOUT)
     def execute_tool(
         self, tool_name: str, input_args: Dict[str, Any], preview_mode: bool = False
     ) -> str:
@@ -54,6 +88,9 @@ class TulipToolExecutor:
             # Return result in Bedrock-compatible format
             return self._success_response(result)
 
+        except TimeoutError as e:
+            logger.error(f"Tool '{tool_name}' execution timed out after {TOOL_EXECUTION_TIMEOUT}s")
+            return self._error_response(f"Tool execution timed out: {str(e)}")
         except Exception as e:
             logger.error(f"Error executing tool {tool_name}: {e}", exc_info=True)
             return self._error_response(str(e))
