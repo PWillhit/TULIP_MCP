@@ -1,0 +1,30 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, windows]
+
+    steps:
+      - name: Confirm runner is being used
+        run: |
+          Write-Host "Running on: self-hosted windows runner"
+          whoami
+          hostname
+
+      - name: Sync repo to main
+        run: |
+          $ErrorActionPreference = "Stop"
+          $AppDir="C:\Users\PWillhit\TULIP_MCP"
+          $ServiceName="TulipWeb"
+          nssm stop $ServiceName
+          cd $AppDir
+          git fetch origin
+          git reset --hard origin/main
+          nssm start $ServiceName
+          exit 0
