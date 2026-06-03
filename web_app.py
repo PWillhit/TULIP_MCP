@@ -1,5 +1,6 @@
 import os
 import signal
+import asyncio
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -13,6 +14,8 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from botocore.exceptions import ClientError, ConnectTimeoutError, ReadTimeoutError
+from uuid import uuid4
+from conversation_store import ConversationStore
 
 
 load_dotenv()
@@ -27,8 +30,12 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, lambda request, exc: HTTPException(status_code=429, detail="Rate limit exceeded: 10 requests per minute"))
 
-# In-memory conversation history
-conversation_history = []
+# Conversation storage with SQLite persistence
+store = ConversationStore(
+    db_path=os.getenv("CONVERSATION_DB_PATH", "./conversations.db"),
+    ttl_days=int(os.getenv("CONVERSATION_TTL_DAYS", "7")),
+    cache_size=int(os.getenv("CONVERSATION_CACHE_SIZE", "10")),
+)
 
 # Enable CORS for network access
 app.add_middleware(
@@ -123,6 +130,7 @@ def execute_mcp_tool(tool_name: str, tool_input: Dict[str, Any]) -> str:
 
 class QueryRequest(BaseModel):
     question: str
+    session_id: Optional[str] = None
 
 
 def generate_system_prompt(tools: List[Dict[str, Any]]) -> str:
@@ -183,6 +191,33 @@ When constructing queries:
 SYSTEM_PROMPT = generate_system_prompt(TOOLS)
 
 
+async def periodic_cleanup():
+    """Run cleanup of expired sessions every hour."""
+    while True:
+        try:
+            await asyncio.sleep(3600)  # Every hour
+            deleted_count = store.cleanup_expired()
+            if deleted_count > 0:
+                logger.info(f"Cleanup task: deleted {deleted_count} expired sessions")
+        except Exception as e:
+            logger.error(f"Error in cleanup task: {e}")
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database and start background tasks."""
+    store.init_db()
+    asyncio.create_task(periodic_cleanup())
+    logger.info("Startup: database initialized and cleanup task started")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Close database connection."""
+    store.close()
+    logger.info("Shutdown: database connection closed")
+
+
 @app.get("/shutdown")
 async def shutdown():
     """Shutdown the server gracefully."""
@@ -205,13 +240,16 @@ async def ask_question(request: Request, query: QueryRequest):
     if not query.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
+    # Generate session ID if not provided
+    session_id = query.session_id or f"session_{uuid4().hex[:12]}"
 
     try:
         # Add user message to history
-        conversation_history.append({"role": "user", "content": query.question})
+        store.add_message(session_id, "user", query.question)
 
         # Build full context including conversation history
         history_text = ""
+        conversation_history = store.get_history(session_id)
         if len(conversation_history) > 1:
             history_text = "Previous conversation:\n"
             for msg in conversation_history[:-1]:  # All but the current user message
@@ -293,7 +331,8 @@ async def ask_question(request: Request, query: QueryRequest):
                 logger.error(f"Unexpected Bedrock error: {e}")
                 return {
                     "answer": "Unexpected error. Please try again.",
-                    "success": False
+                    "success": False,
+                    "session_id": session_id
                 }
 
             # Check if we're done
@@ -309,15 +348,17 @@ async def ask_question(request: Request, query: QueryRequest):
                     logger.warning("Claude returned end_turn with no text content")
                     return {
                         "answer": "No response generated",
-                        "success": False
+                        "success": False,
+                        "session_id": session_id
                     }
 
                 # Add assistant response to history
-                conversation_history.append({"role": "assistant", "content": final_response})
+                store.add_message(session_id, "assistant", final_response)
 
                 return {
                     "answer": final_response,
-                    "success": True
+                    "success": True,
+                    "session_id": session_id
                 }
 
             # Process tool calls
@@ -387,29 +428,45 @@ async def ask_question(request: Request, query: QueryRequest):
     except Exception as e:
         logger.error(f"Error processing question: {e}", exc_info=True)
         # Remove the user message from history if it failed
-        if conversation_history and conversation_history[-1]["role"] == "user":
-            conversation_history.pop()
+        store.rollback_last_message(session_id)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/history")
-async def get_history():
-    """Get current conversation history."""
-    return {"history": conversation_history}
+async def get_history(session_id: Optional[str] = None):
+    """Get conversation history for a session."""
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
+    history = store.get_history(session_id)
+    return {"history": history, "session_id": session_id}
 
 
 @app.post("/api/clear-history")
-async def clear_history():
-    """Clear conversation history."""
-    global conversation_history
-    conversation_history = []
-    return {"status": "cleared"}
+async def clear_history(query: QueryRequest):
+    """Clear conversation history for a session."""
+    if not query.session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
+    store.clear_history(query.session_id)
+    return {"status": "cleared", "session_id": query.session_id}
 
 
 @app.get("/")
 async def get_homepage():
     """Serve the homepage."""
     return FileResponse("index.html")
+
+
+@app.get("/api/sessions")
+async def list_sessions():
+    """Get count of active sessions (debug endpoint)."""
+    return {"active_sessions": store.count_active_sessions()}
+
+
+@app.post("/api/cleanup")
+async def trigger_cleanup():
+    """Manually trigger cleanup of expired sessions."""
+    deleted_count = store.cleanup_expired()
+    return {"status": "completed", "deleted_sessions": deleted_count}
 
 
 @app.get("/health")
@@ -420,7 +477,8 @@ async def health_check():
         "bedrock_configured": bool(bedrock_client),
         "aws_profile": AWS_PROFILE,
         "aws_region": AWS_REGION,
-        "bedrock_model": BEDROCK_MODEL
+        "bedrock_model": BEDROCK_MODEL,
+        "active_sessions": store.count_active_sessions()
     }
 
 

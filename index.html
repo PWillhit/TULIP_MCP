@@ -217,6 +217,18 @@
         const responseContainer = document.getElementById('responseContainer');
         const responseBox = document.getElementById('responseBox');
 
+        // Session ID management
+        function getOrCreateSessionId() {
+            let sessionId = localStorage.getItem('tulip_session_id');
+            if (!sessionId) {
+                sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                localStorage.setItem('tulip_session_id', sessionId);
+            }
+            return sessionId;
+        }
+
+        const sessionId = getOrCreateSessionId();
+
         // Auto-expand textarea as user types
         questionInput.addEventListener('input', () => {
             questionInput.style.height = 'auto';
@@ -249,7 +261,10 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ question: question })
+                    body: JSON.stringify({
+                        question: question,
+                        session_id: sessionId
+                    })
                 });
 
                 const data = await response.json();
@@ -257,6 +272,10 @@
                 if (response.ok) {
                     responseBox.textContent = data.answer;
                     responseBox.classList.remove('error-box');
+                    // Update session ID if returned
+                    if (data.session_id) {
+                        localStorage.setItem('tulip_session_id', data.session_id);
+                    }
                 } else {
                     responseBox.textContent = `Error: ${data.detail || 'Unknown error'}`;
                     responseBox.classList.add('error-box');
